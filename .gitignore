@@ -1,0 +1,6 @@
+*.*
+!*.py
+!*.pkl
+!*.png
+!*.gif
+!.gitignore
