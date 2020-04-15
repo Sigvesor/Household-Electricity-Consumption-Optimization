@@ -14,7 +14,17 @@ from scipy.optimize import linprog
 
 
 class Optimisation:
-    ## Appliances listet by name --  energy , power, 0perating hours
+    """Base Class for Assignment 3
+    
+    Appliances are listed as class elements, selected while initialising the problem related classes.
+    
+    Variables
+    --------_
+    app: dict of lists
+        energy , power, timeslots (operating hours)
+    pricing: <working>
+    time_range: <working>
+    """
     # Non-shiftable appliances [kWh/day]
     non_shift_app = {
         'lighting': [ # Lightning between 10:00-20:00
@@ -67,7 +77,7 @@ class Optimisation:
             ],
         'ev': [ # Electric Vehicle
             9.90, 
-            .5, 
+            9.9/13, # energy demanded devided by 13operating hours
             [i in list(range(0, 6+1)) +  list(range(18, 23+1)) for i in range(24)],
             ], 
         # 'vg': 0.09, # Game console
@@ -102,6 +112,8 @@ class Optimisation:
         
 
 class Prob1(Optimisation):
+    """Problem 1 - subclass
+    """
     def __init__(self):
         super().__init__(
             app_names=['dishes', 'laundry', 'ev'],
@@ -111,21 +123,29 @@ class Prob1(Optimisation):
         self.optimise()
         
     def set_time(self):
+        """Create peak and base timeslots for every app
+        """
         self.apps['ts_p'] = self.apps['ts'].apply(lambda x: [ai and bi for ai, bi in zip(x, self.pricing_time)])
         self.apps['ts_b'] = self.apps['ts'].apply(lambda x: [ai and not bi for ai, bi in zip(x, self.pricing_time)])
-        # if self.apps['ts'].apply(lambda x : sum(x)) is (self.apps['ts_p'].apply(lambda x : sum(x)) + self.apps['ts_b'].apply(lambda x : sum(x))):
-        #     print('failed')
         
     def optimise(self):
+        """Run Optimisations
+        
+        Result
+        ------
+        x: list of x values (true operating hours for every app for either base or peak timer)
+            op_dish_p, op_laun_p, op_ev_p, op_dish_b, op_laun_b, op_ev_b
+        """
         c = array([x * self.pricing['peak'] for x in self.apps['p']] + [x *self.pricing['base'] for x in self.apps['p']])
-        # A_ub = np.eye(6)
+        # A_ub = np.eye(6) 
         # b_ub = array([sum(x) for x in self.apps['ts_p']] + [sum(x) for x in self.apps['ts_b']])
-        bounds = np.array([
-            np.zeros(6), 
-            np.concatenate(
-                ([sum(x) for x in self.apps['ts_p']], [sum(x) for x in self.apps['ts_b']])
-                )]
-            ).transpose()
+        # bounds = np.array([
+        #     np.zeros(6), 
+        #     np.concatenate(
+        #         ([sum(x) for x in self.apps['ts_p']], [sum(x) for x in self.apps['ts_b']])
+        #         )]
+        #     ).transpose().tolist()
+        bounds = tuple((0, sum(x)) for x in self.apps['ts_p']) + tuple((0, sum(x)) for x in self.apps['ts_b'])
         A_eq = np.concatenate(([np.eye(3) * self.apps['p'].to_numpy()] * 2), axis=1)
         b_eq = array(self.apps['e'].tolist())
         res = linprog(
@@ -135,13 +155,25 @@ class Prob1(Optimisation):
             A_eq=A_eq,
             b_eq=b_eq,
             bounds=bounds,
+            method='simplex',
             )
+        print('A_eq:')
+        print(A_eq)
+        print('b_eq:')
+        print(b_eq)
+        # print('A_ub:')
+        # print(A_ub)
+        # print('b_ub:')
+        # print(b_ub)
+        print('bounds:')
+        print(bounds)
+        print('c:')
+        print(c)
+        print('results:')
         print(res)
         
                 
         
 if __name__ == "__main__":
     obj = Prob1()
-    # print(obj.apps)
-        
     
