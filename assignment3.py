@@ -29,7 +29,7 @@ class Optimisation:
     non_shift_app = {
         'lighting': [ # Lightning between 10:00-20:00
             1.50, 
-            [], 
+            1.5/11, 
             [i in list(range(10, 20+1)) for i in range(24)],
             ], 
         'heating': [ # Household heating
@@ -90,25 +90,13 @@ class Optimisation:
         # 'waterheater': 12.0, # 4kW*3h
         }
     apps = {**non_shift_app, **shift_app}
-    # Pricing Schemes
-    pricing = {
-        'ToU': {
-            'peak': 1, # €/kWh
-            'base': .5, # €/kWh
-            },
-        }
-    time_range = {
-        'ToU': [i in list(range(17, 20+1)) for i in range(24)],
-        }
         
     def __init__(self, app_names=None, pricing=None):
         self.apps = pd.DataFrame.from_dict(
-            {key: self.apps[key] for key in app_names}, 
+            self.apps if not app_names else {key: self.apps[key] for key in app_names}, 
             orient='index',
             columns=['e', 'p', 'ts'],
             )
-        self.pricing_time = self.time_range[pricing]
-        self.pricing = self.pricing[pricing]
         
 
 class Prob1(Optimisation):
@@ -117,8 +105,12 @@ class Prob1(Optimisation):
     def __init__(self):
         super().__init__(
             app_names=['dishes', 'laundry', 'ev'],
-            pricing = 'ToU',
             )
+        self.pricing_time = [i in list(range(17, 20+1)) for i in range(24)]
+        self.pricing = {
+            'peak': 1, # €/kWh
+            'base': .5, # €/kWh
+            }
         self.set_time()
         self.optimise()
         
@@ -130,6 +122,7 @@ class Prob1(Optimisation):
         
     def optimise(self):
         """Run Optimisations
+        TODO: linprog method: default not working, simplex does due at the moment
         
         Result
         ------
@@ -172,8 +165,12 @@ class Prob1(Optimisation):
         print('results:')
         print(res)
         
-                
+class Prob2(Optimisation):
+    def __init__(self):
+        super().__init__()
+        self.pricing()
         
 if __name__ == "__main__":
     obj = Prob1()
+    obj = Prob2()
     
