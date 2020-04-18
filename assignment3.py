@@ -119,15 +119,15 @@ class Optimisation:
                 start = np.where(tmp[idx-1] != 0)[0][-1] + 1
             else:
                 start = idx
-            tmp[idx, start:start + item] = apps['p'].iloc[idx]
-        return tmp
+            tmp[idx, start:start + item] = 1
+        return tmp.transpose()
     
-    # def _conc_upper_bounds_matrix(self):
-    #     tmp = np.zeros((24, len(self.apps)))
-    #     for idx1, (key, row) in enumerate(self.apps.iterrows()):
-    #         for idx2 in row['ts']:
-    #             tmp[idx2, idx1] = 1
-    #     return tmp
+    def _conc_upper_bounds_matrix(self):
+        tmp = np.zeros((24, len(self.apps)))
+        for idx1, (key, row) in enumerate(self.apps.iterrows()):
+            for idx2 in row['ts']:
+                tmp[idx2, idx1] = 1
+        return tmp
     
     def optimise(self):
         """Run Optimisations
@@ -138,15 +138,17 @@ class Optimisation:
         x: list of x values (true operating hours for every app for either base or peak timer)
             op_dish_p, op_laun_p, op_ev_p, op_dish_b, op_laun_b, op_ev_b
         """
+        app_matrix = self._conc_app_matrix()
         k = []
         for idx, row in self.apps.iterrows():
             k = k + [self.pricing[i] * row['p'] for i in row['ts']]
+        k = app_matrix * self.pricing
         c = array(k)
         # A_ub = self._conc_upper_bounds_matrix()
         # b_ub = np.ones((24, 1)) * 20
         bounds = tuple([(0, 1)] * len(c))
-        A_eq = self._conc_app_matrix()
-        b_eq = array(self.apps['e'].tolist())
+        A_eq = app_matrix * self.apps['p'].to_numpy()
+        b_eq = self.apps['e'].to_numpy().transpose()
         res = linprog(
             c,
             A_eq=A_eq,
@@ -155,9 +157,12 @@ class Optimisation:
             # b_ub=b_ub,
             bounds=bounds,
             method='simplex',
+            options={
+                'disp':True, 'maxiter':5000
+                },
             )
         res_var = self._split_app_matrix(res.x)        
-        print('cost: ' + str(res.fun) + ' €/d')
+        # print('cost: ' + str(res.fun) + ' €/d')
         # print('results:')
         # print(res)
         # print(res_var)
@@ -244,7 +249,7 @@ class Prob2(Optimisation):
         super().__init__(
             app_names=['dishes', 'laundry', 'ev'],
             )
-        self.pricing = pd.read_csv('nordpool_20200303.csv', decimal=',')[data_name][0:24] / 1000 # €/kWh
+        self.pricing = pd.read_csv('nordpool_20200303.csv', decimal=',')[data_name][0:24].to_numpy() / 1000 # €/kWh
         self.rtp_noise()
         self.optimise()
     
@@ -253,12 +258,21 @@ class Prob2(Optimisation):
         self.pricing += noise * self.pricing * .1
         
 class Prob3(Optimisation):
-    def __init__(self):
-        pass
+    def __init__(self, data_name='Krsand'):
+        super().__init__(
+            app_names=['dishes', 'laundry', 'ev'],
+            )
+        n_housholds = 30
+        self.apps = pd.concat([self.apps]*n_housholds, keys=range(n_housholds))
+        self.pricing = pd.read_csv('nordpool_20200303.csv', decimal=',')[data_name][0:24] / 1000 # €/kWh
+        self.optimise()
+        
         
         
 if __name__ == "__main__":
-    obj = Prob1_simple()
-    obj = Prob1()
-    obj = Prob2(data_name='Ger')
+    # obj = Prob1_simple()
+    # obj = Prob1()
+    obj = Prob2()
+    # obj = Prob2(data_name='Ger')
+    # obj = Prob3()
     
