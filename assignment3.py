@@ -107,7 +107,7 @@ class Optimisation:
                 start = np.where(p_val[idx-1] != 0)[0][-1] + 1
             else:
                 start = idx
-            ts[key] = [row['ts'], tmp[start:start + row['oh']]]
+            ts[key] = array([row['ts'], tmp[start:start + row['oh']].tolist()]).transpose()
         return ts
             
     def _conc_app_matrix(self):
@@ -121,25 +121,14 @@ class Optimisation:
                 start = idx
             tmp[idx, start:start + item] = apps['p'].iloc[idx]
         return tmp
-
-class Prob1(Optimisation):
-    """Problem 1 - subclass
-    """
-    def __init__(self):
-        super().__init__(
-            app_names=['dishes', 'laundry', 'ev'],
-            )
-        self.pricing_time = [i in list(range(17, 20+1)) for i in range(24)]
-        self.pricing = [1 if i else .5 for i in self.pricing_time]
-        # self.set_time()
-        self.optimise()
-        
-    def set_time(self):
-        """Create peak and base timeslots for every app
-        """
-        self.apps['ts_p'] = self.apps['ts'].apply(lambda x: [ai and bi for ai, bi in zip(x, self.pricing_time)])
-        self.apps['ts_b'] = self.apps['ts'].apply(lambda x: [ai and not bi for ai, bi in zip(x, self.pricing_time)])
-        
+    
+    # def _conc_upper_bounds_matrix(self):
+    #     tmp = np.zeros((24, len(self.apps)))
+    #     for idx1, (key, row) in enumerate(self.apps.iterrows()):
+    #         for idx2 in row['ts']:
+    #             tmp[idx2, idx1] = 1
+    #     return tmp
+    
     def optimise(self):
         """Run Optimisations
         TODO: linprog method: default not working, simplex does due at the moment
@@ -153,48 +142,123 @@ class Prob1(Optimisation):
         for idx, row in self.apps.iterrows():
             k = k + [self.pricing[i] * row['p'] for i in row['ts']]
         c = array(k)
-        # c = array([x * self.pricing['peak'] for x in self.apps['p']] + [x *self.pricing['base'] for x in self.apps['p']])
+        # A_ub = self._conc_upper_bounds_matrix()
+        # b_ub = np.ones((24, 1)) * 20
         bounds = tuple([(0, 1)] * len(c))
-        # bounds = tuple((0, sum(x)) for x in self.apps['ts_p']) + tuple((0, sum(x)) for x in self.apps['ts_b'])
-        # A_eq = np.zeros((len(self.apps), len(c)))
-        # for idx, item in enumerate(self.apps['oh']):
-        #     if idx != 0:
-        #         start = np.where(A_eq[idx-1] != 0)[0][-1] + 1
-        #     else:
-        #         start = idx
-        #     A_eq[idx, start:start + item] = self.apps['p'].iloc[idx]
         A_eq = self._conc_app_matrix()
-        # A_eq = np.concatenate(([np.eye(3) * self.apps['p'].to_numpy()] * 2), axis=1)
         b_eq = array(self.apps['e'].tolist())
         res = linprog(
             c,
             A_eq=A_eq,
             b_eq=b_eq,
+            # A_ub=A_ub,
+            # b_ub=b_ub,
             bounds=bounds,
             method='simplex',
             )
         res_var = self._split_app_matrix(res.x)        
-        print('A_eq:')
-        print(A_eq)
-        print('b_eq:')
-        print(b_eq)
+        print('cost: ' + str(res.fun) + ' €/d')
+        # print('results:')
+        # print(res)
+        # print(res_var)
+    
+    
+class Prob1_simple(Optimisation):
+    """Problem 1 - subclass
+    """
+    def __init__(self):
+        super().__init__(
+            app_names=['dishes', 'laundry', 'ev'],
+            )
+        self.pricing_time = [i in list(range(17, 20+1)) for i in range(24)]
+        self.pricing = {
+            'peak': .1, # €/kWh
+            'base': .05, # €/kWh
+            }
+        self.apps['ts'] = self.apps['ts'].apply(lambda x: [i in x for i in range(24)])
+        self.apps['ts_p'] = self.apps['ts'].apply(lambda x: [ai and bi for ai, bi in zip(x, self.pricing_time)])
+        self.apps['ts_b'] = self.apps['ts'].apply(lambda x: [ai and not bi for ai, bi in zip(x, self.pricing_time)])
+        self.optimise()
+        
+    def optimise(self):
+        """Run Optimisations
+        TODO: linprog method: default not working, simplex does due at the moment
+        
+        Result
+        ------
+        x: list of x values (true operating hours for every app for either base or peak timer)
+            op_dish_p, op_laun_p, op_ev_p, op_dish_b, op_laun_b, op_ev_b
+        """
+        c = array([x * self.pricing['peak'] for x in self.apps['p']] + [x *self.pricing['base'] for x in self.apps['p']])
+        # A_ub = np.eye(6) 
+        # b_ub = array([sum(x) for x in self.apps['ts_p']] + [sum(x) for x in self.apps['ts_b']])
+        # bounds = np.array([
+        #     np.zeros(6), 
+        #     np.concatenate(
+        #         ([sum(x) for x in self.apps['ts_p']], [sum(x) for x in self.apps['ts_b']])
+        #         )]
+        #     ).transpose().tolist()
+        bounds = tuple((0, sum(x)) for x in self.apps['ts_p']) + tuple((0, sum(x)) for x in self.apps['ts_b'])
+        A_eq = np.concatenate(([np.eye(3) * self.apps['p'].to_numpy()] * 2), axis=1)
+        b_eq = array(self.apps['e'].tolist())
+        res = linprog(
+            c,
+            # A_ub=A_ub,
+            # b_ub=b_ub,
+            A_eq=A_eq,
+            b_eq=b_eq,
+            bounds=bounds,
+            method='simplex',
+            )
+        print('cost: ' + str(res.fun) + ' €/d')
+        # print('A_eq:')
+        # print(A_eq)
+        # print('b_eq:')
+        # print(b_eq)
         # print('A_ub:')
         # print(A_ub)
         # print('b_ub:')
         # print(b_ub)
-        print('bounds:')
-        print(bounds)
-        print('c:')
-        print(c)
-        print('results:')
-        print(res)
+        # print('bounds:')
+        # print(bounds)
+        # print('c:')
+        # print(c)
+        # print('results:')
+        # print(res)
+        
+
+class Prob1(Optimisation):
+    """Problem 1 - subclass
+    """
+    def __init__(self):
+        super().__init__(
+            app_names=['dishes', 'laundry', 'ev'],
+            )
+        pricing_time = [i in list(range(17, 20+1)) for i in range(24)]
+        self.pricing = [.1 if i else .05 for i in pricing_time] # €/kWh
+        self.optimise()
+    
         
 class Prob2(Optimisation):
+    def __init__(self, data_name='Krsand'):
+        super().__init__(
+            app_names=['dishes', 'laundry', 'ev'],
+            )
+        self.pricing = pd.read_csv('nordpool_20200303.csv', decimal=',')[data_name][0:24] / 1000 # €/kWh
+        self.rtp_noise()
+        self.optimise()
+    
+    def rtp_noise(self):
+        noise = np.random.randint(-100, 100, len(self.pricing)) / 100
+        self.pricing += noise * self.pricing * .1
+        
+class Prob3(Optimisation):
     def __init__(self):
-        super().__init__()
-        self.pricing()
+        pass
+        
         
 if __name__ == "__main__":
+    obj = Prob1_simple()
     obj = Prob1()
-    # obj = Prob2()
+    obj = Prob2(data_name='Ger')
     
