@@ -190,7 +190,7 @@ class Optimisation:
     
     def execute(self):
         raw_result = self.optimise()
-        self.raw_result = raw_result()
+        self.raw_result = raw_result
         power, pricing = self.resolve_result(raw_result)
         self.result = {
             'power': power,
@@ -332,7 +332,7 @@ class Prob3(Optimisation):
             # app_names=['dishes', 'laundry', 'ev'],
             pricing=kwargs.get('data_name', 'Krsand'),
             )
-        n_housholds = 30
+        n_housholds = 10
         self.power_max *= n_housholds
         self.apps = pd.concat([self.apps]*n_housholds, keys=range(n_housholds))
         self.time_matrix = self._create_time_matrix()
