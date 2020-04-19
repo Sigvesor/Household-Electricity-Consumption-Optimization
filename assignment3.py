@@ -29,32 +29,32 @@ class Optimisation:
     non_shift_app = {
         'lighting': [ # Lightning between 10:00-20:00
             1.50, 
-            [], 
+            1.50/10, 
             [i in list(range(10, 20+1)) for i in range(24)],
             ], 
         'heating': [ # Household heating
             8.00,
-            None,
+            8.00/24,
             [i in list(range(24)) for i in range(24)],
             ],
         'fridge': [ # fridge/freezer + small freezer
             3.00, 
-            None,
+            3.00/24,
             [i in list(range(24)) for i in range(24)],
             ],
         'stove': [ # Cooking stove
-            3.90, 
-            None,
+            2.40, 
+            2.40,
             [i in list(range(5, 7+1)) + list(range(14, 22+1)) for i in range(24)],
             ],
         'tv': [ # Medium size TV
-            0.40, 
-            None,
+            0.15, 
+            0.03,
             [i in list(range(4, 7+1)) + list(range(14, 22+1)) for i in range(24)],
             ],
-        'computer': [ # 2 computers
-            1.20, 
-            None,
+        'computer': [ # 2 laptops
+            0.60, 
+            0.12,
             [i in list(range(4, 7+1)) + list(range(14, 22+1)) for i in range(24)],
             ],
         }
@@ -67,7 +67,7 @@ class Optimisation:
             ], 
         'laundry': [ # Laundry machine
             1.94, 
-            .50, 
+            0.50, 
             [i in list(range(3, 7+1)) + list(range(14, 22+1)) for i in range(24)],
             ], 
         'dryer': [ # Clothes dryer
