@@ -35,27 +35,27 @@ class Optimisation:
         'heating': [ # Household heating
             8.00,
             None,
-            [],
+            [i in list(range(24)) for i in range(24)],
             ],
         'fridge': [ # fridge/freezer + small freezer
             3.00, 
             None,
-            [],
+            [i in list(range(24)) for i in range(24)],
             ],
         'stove': [ # Cooking stove
             3.90, 
             None,
-            [],
+            [i in list(range(5, 7+1)) + list(range(14, 22+1)) for i in range(24)],
             ],
         'tv': [ # Medium size TV
             0.40, 
             None,
-            [],
+            [i in list(range(4, 7+1)) + list(range(14, 22+1)) for i in range(24)],
             ],
         'computer': [ # 2 computers
             1.20, 
             None,
-            [],
+            [i in list(range(4, 7+1)) + list(range(14, 22+1)) for i in range(24)],
             ],
         }
     # Shiftable appliances [kWh/day]
@@ -67,27 +67,59 @@ class Optimisation:
             ], 
         'laundry': [ # Laundry machine
             1.94, 
-            .5, 
+            .50, 
             [i in list(range(3, 7+1)) + list(range(14, 22+1)) for i in range(24)],
             ], 
         'dryer': [ # Clothes dryer
             2.50, 
-            None,
-            [],
+            3.00,
+            [i in list(range(3, 7+1)) + list(range(14, 22+1)) for i in range(24)],
             ],
         'ev': [ # Electric Vehicle
             9.90, 
             9.9/13, # energy demanded devided by 13operating hours
             [i in list(range(0, 6+1)) +  list(range(18, 23+1)) for i in range(24)],
             ], 
-        # 'vg': 0.09, # Game console
-        # 'phone': 0.04, # Cellphone charge (x3) - 5W*3h
-        # 'coffee': 0.28, # Coffee-maker - 800W*0.17h*2
-        # 'vacuum': 0.23, # Vacuum cleaner - 1400W*0.17h
-        # 'microwave': 0.30, # 1200W*0.25h
-        # 'wifi': 0.14, # Router - 6W*24h
-        # 'ac': 3.00, # Air-condition - 1kW*3h
-        # 'waterheater': 12.0, # 4kW*3h
+        'gc': [ # Game console
+            0.27, 
+            0.09,
+            [i in list(range(18, 23+1)) for i in range(24)],
+            ], 
+        'phone': [ # Cellphone charge (x3)
+            0.05, 
+            0.015,
+            [i in list(range(0, 3)) for i in range(24)],
+            ],
+        'coffee': [ # Coffee maker, 2 times/day
+            0.53, 
+            0.80,
+            [i in list(range(3, 7+1)) + list(range(14, 18+1)) for i in range(24)],
+            ], 
+        'vacuum': [ # Vacuum cleaner
+            0.23, 
+            1.40,
+            [i in list(range(3, 7+1)) + list(range(14, 23+1)) for i in range(24)],
+            ], 
+        'microwave': [ # 
+            0.30, 
+            1.20,
+            [i in list(range(5, 7+1)) + list(range(14, 22+1)) for i in range(24)],
+            ], 
+        'wifi': [ # Router
+            0.14, 
+            0.006,
+            [i in list(range(24)) for i in range(24)],
+            ], 
+        'ac': [ # Air-condition
+            3.00, 
+            1.00,
+            [i in list(range(24)) for i in range(24)],
+            ], 
+        'waterheater': [ # 
+            12.0, 
+            4.00,
+            [i in list(range(24)) for i in range(24)],
+            ], 
         }
     apps = {**non_shift_app, **shift_app}
     # Pricing Schemes
