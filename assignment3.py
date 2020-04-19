@@ -27,7 +27,7 @@ class Optimisation:
     time_range: <working>
     """
     # Non-shiftable appliances [kWh/day]
-    non_shift_app = {
+    non_shift_apps = {
         'lighting': [ # Lightning between 10:00-20:00
             1.50, 
             1.5/11, 
@@ -60,7 +60,7 @@ class Optimisation:
             ],
         }
     # Shiftable appliances [kWh/day]
-    shift_app = {
+    shift_apps = {
         'dishes': [ # Dishwasher
             1.44, 
             .35, 
@@ -123,35 +123,40 @@ class Optimisation:
             ], 
         }
     # apps = {**non_shift_app, **shift_app}
-    apps = shift_app
+    # apps = shift_apps
         
     def __init__(self, app_names=None, pricing=None):
         self.nr_of_hours = 24
-        self.power_max = 10
+        self.power_max = 5
         self.apps = pd.DataFrame.from_dict(
-            self.apps if not app_names else {key: self.apps[key] for key in app_names}, 
+            self.apps, 
             orient='index',
             columns=['e', 'p', 'ts'],
             )
         self.apps['oh'] = self.apps['ts'].apply(lambda x: len(x))
-        self.time_matrix = self._create_time_matrix()
+        self.time_matrix = self._create_time_matrix(self.apps)
         if pricing:
-            # self.pricing = self._rtp_noise(
-            #     pd.read_csv('nordpool_20200303.csv', decimal=',')[pricing][0:self.nr_of_hours].to_numpy() / 1000 # €/kWh
-            #     )
-            self.pricing = pd.read_csv('nordpool_20200303.csv', decimal=',')[pricing][0:self.nr_of_hours].to_numpy() / 1000 # €/kWh
+            self.pricing = self._rtp_noise(
+                pd.read_csv('nordpool_20200303.csv', decimal=',')[pricing][0:self.nr_of_hours].to_numpy() / 1000 # €/kWh
+                )
+            # self.pricing = pd.read_csv('nordpool_20200303.csv', decimal=',')[pricing][0:self.nr_of_hours].to_numpy() / 1000 # €/kWh
+            self.non_shift_offset = self._compute_ineq_con_offest()
         else:
             pricing_time = [i in list(range(17, 20+1)) for i in range(self.nr_of_hours)]
             self.pricing = [.1 if i else .05 for i in pricing_time] # €/kWh
+            self.non_shift_offset = {
+                'power': np.zeros(self.nr_of_hours),
+                'pricing': np.zeros(self.nr_of_hours),
+                }
         self.raw_result = []
         self.result = []
             
-    def _create_time_matrix(self):
-        tmp = np.zeros((self.nr_of_hours, len(self.apps)))
-        for idx1, (key, row) in enumerate(self.apps.iterrows()):
+    def _create_time_matrix(self, apps):
+        tmp = np.zeros((self.nr_of_hours, len(apps)))
+        for idx1, (key, row) in enumerate(apps.iterrows()):
             for idx2 in row['ts']:
                 tmp[idx2, idx1] = 1
-        tmp = pd.DataFrame(tmp, columns=self.apps.index)
+        tmp = pd.DataFrame(tmp, columns=apps.index)
         return tmp
     
     def _resolve_res_matrix(self, res):
@@ -188,6 +193,20 @@ class Optimisation:
         pricing += noise * pricing * .1
         return pricing
     
+    def _compute_ineq_con_offest(self):
+        apps = pd.DataFrame.from_dict(
+            self.non_shift_apps, 
+            orient='index',
+            columns=['e', 'p', 'ts'],
+            )
+        time_matrix = self._create_time_matrix(apps).to_numpy()
+        power = (time_matrix * apps['p'].to_numpy()).sum(axis=1)
+        non_shift_offset = {
+            'power': power,
+            'pricing': power * self.pricing,
+            }
+        return non_shift_offset
+    
     def execute(self):
         raw_result = self.optimise()
         self.raw_result = raw_result
@@ -196,7 +215,8 @@ class Optimisation:
             'power': power,
             'pricing': pricing,
             }
-        self.plot_time_wise(power)
+        self.plot_mode('pricing')
+        self.plot_mode('power')
         
     def resolve_result(self, raw_result):
         res_time_wise = self._resolve_res_matrix(raw_result)
@@ -225,7 +245,8 @@ class Optimisation:
         power_matrix = time_matrix * self.apps['p'].to_numpy()
         price_matrix = power_matrix.T * self.pricing
         A_ub = self._conc_aeq_matrix(power_matrix)
-        b_ub = np.ones(self.nr_of_hours) *  self.power_max
+        b_ub = np.subtract(np.ones(self.nr_of_hours) *  self.power_max, self.non_shift_offset['power'])
+        # b_ub = np.ones(self.nr_of_hours) *  self.power_max
         A_eq = self._conc_aub_matrix(power_matrix.T)
         b_eq = self.apps['e'].to_numpy()
         c = price_matrix.ravel()
@@ -256,6 +277,36 @@ class Optimisation:
             legend=False,
             )
         ax.set_xticks(range(self.nr_of_hours))
+        
+    def plot_mode(self, mode):
+        fig = plt.figure(figsize=(24,18))
+        fig.suptitle(mode, fontsize=24)
+        ax1 = fig.add_subplot(3, 1, 1)
+        ax2 = fig.add_subplot(3, 1, 2)
+        data = self.result[mode]
+        data.plot(
+            ax=ax1,
+            drawstyle="steps-post",
+            linewidth=2,
+            # legend=False,
+            )
+        ax1.set_xticks(range(self.nr_of_hours))
+        tmp = {
+            'non_shift': self.non_shift_offset[mode],
+            'shift': self.result[mode].sum(axis=1),
+            }
+        tmp['total'] = tmp['non_shift'] + tmp['shift']
+        if mode is 'pricing':
+            tmp['price'] = self.pricing
+        data = pd.DataFrame(
+            tmp
+            )
+        data.plot(
+            ax=ax2,
+            drawstyle="steps-post",
+            linewidth=2,
+            )
+        ax2.set_xticks(range(self.nr_of_hours))
 
 
 class Prob1_simple(Optimisation):
@@ -311,16 +362,16 @@ class Prob1(Optimisation):
     """Problem 1 - subclass
     """
     def __init__(self):
+        self.apps  = {key: self.shift_apps[key] for key in ['dishes', 'laundry', 'ev']}
         super().__init__(
-            app_names=['dishes', 'laundry', 'ev'],
             )
         self.execute()
 
 
 class Prob2(Optimisation):
     def __init__(self, **kwargs):
+        self.apps = self.shift_apps
         super().__init__(
-            # app_names=['dishes', 'laundry', 'ev'],
             pricing=kwargs.get('data_name', 'Krsand'),
             )
         self.execute()
@@ -328,22 +379,23 @@ class Prob2(Optimisation):
         
 class Prob3(Optimisation):
     def __init__(self, **kwargs):
+        n_housholds = 10
+        self.apps = self.shift_apps
+        # for 
         super().__init__(
-            # app_names=['dishes', 'laundry', 'ev'],
             pricing=kwargs.get('data_name', 'Krsand'),
             )
-        n_housholds = 10
         self.power_max *= n_housholds
         self.apps = pd.concat([self.apps]*n_housholds, keys=range(n_housholds))
-        self.time_matrix = self._create_time_matrix()
+        self.apps = self.apps.drop([(i,'ev') for i in range(0,n_housholds,2)])
+        self.time_matrix = self._create_time_matrix(self.apps)
         self.execute()
-        
         
         
 if __name__ == "__main__":
     # obj = Prob1_simple()
     # obj = Prob1()
-    # obj = Prob2()
+    obj = Prob2()
     # obj = Prob2(data_name='Ger')
-    obj = Prob3()
+    # obj = Prob3()
     
