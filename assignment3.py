@@ -189,6 +189,7 @@ class Optimisation:
         return tmp
         
     def _rtp_noise(self, pricing):
+        np.random.seed(0)
         noise = np.random.randint(-100, 100, len(pricing)) / 100
         pricing += noise * pricing * .1
         return pricing
@@ -279,34 +280,69 @@ class Optimisation:
         ax.set_xticks(range(self.nr_of_hours))
         
     def plot_mode(self, mode):
+        ylabel = {
+            'pricing': 'hourly cost (€)',
+            'power': 'power (kW)',
+            }
         fig = plt.figure(figsize=(24,18))
-        fig.suptitle(mode, fontsize=24)
         ax1 = fig.add_subplot(3, 1, 1)
         ax2 = fig.add_subplot(3, 1, 2)
+        axes = [ax1, ax2]
         data = self.result[mode]
+        data = data.append(
+            pd.DataFrame(data[-1:], index=[self.nr_of_hours], columns=data.columns)
+            )
         data.plot(
-            ax=ax1,
+            ax=axes[0],
             drawstyle="steps-post",
             linewidth=2,
             # legend=False,
             )
-        ax1.set_xticks(range(self.nr_of_hours))
         tmp = {
             'non_shift': self.non_shift_offset[mode],
             'shift': self.result[mode].sum(axis=1),
             }
         tmp['total'] = tmp['non_shift'] + tmp['shift']
-        if mode is 'pricing':
-            tmp['price'] = self.pricing
+        # if mode is 'pricing':
+        #     tmp['price'] = self.pricing
         data = pd.DataFrame(
             tmp
             )
+        data = data.append(
+            pd.DataFrame(data[-1:], index=[self.nr_of_hours], columns=data.columns)
+            )
         data.plot(
-            ax=ax2,
+            ax=axes[1],
             drawstyle="steps-post",
             linewidth=2,
             )
-        ax2.set_xticks(range(self.nr_of_hours))
+        if mode is 'pricing':
+            tmp = pd.DataFrame(self.pricing, columns=['price'])
+            tmp = tmp.append(
+               pd.DataFrame(tmp[-1:], index=[self.nr_of_hours], columns=tmp.columns)
+               )
+            tmp.plot(
+                ax=axes[1],
+                secondary_y=['price'],
+                drawstyle='steps-post',
+                style='--',
+                linewidth=1.5,
+                )
+        elif mode is 'power':
+            tmp = pd.DataFrame([self.power_max]* len(data), columns=['max_power'])
+            tmp.plot(
+                ax=axes[1],
+                # secondary_y=['max_power'],
+                drawstyle='steps-post',
+                style='--',
+                linewidth=1.5,
+                )
+        for ax in axes:
+            ax.set_xticks(range(self.nr_of_hours+1))
+            ax.set_xlabel('time of day (h)')
+            ax.grid('on')
+            ax.set_ylabel(ylabel[mode])
+
 
 
 class Prob1_simple(Optimisation):
@@ -394,8 +430,8 @@ class Prob3(Optimisation):
         
 if __name__ == "__main__":
     # obj = Prob1_simple()
-    # obj = Prob1()
-    obj = Prob2()
-    # obj = Prob2(data_name='Ger')
+    obj = Prob1()
+    # obj = Prob2()
+    obj = Prob2(data_name='Ger')
     # obj = Prob3()
     
