@@ -59,7 +59,7 @@ class Optimisation:
             list(range(15, 22+1)),
             ],
         }
-    # Shiftable appliances [kWh/day]
+    # Shiftable appliances [    /day]
     shift_apps = {
         'dishes': [ # Dishwasher
             1.44, 
@@ -106,11 +106,6 @@ class Optimisation:
             1.20,
             list(range(17, 21+1)),
             ], 
-        # 'wifi': [ # Router
-        #     0.14, 
-        #     0.006,
-        #     list(range(24)),
-        #     ], 
         'ac': [ # Air-condition
             3.00, 
             1.00,
@@ -122,8 +117,6 @@ class Optimisation:
             list(range(24)),
             ], 
         }
-    # apps = {**non_shift_app, **shift_app}
-    # apps = shift_apps
         
     def __init__(self, app_names=None, pricing=None):
         self.nr_of_hours = 24
@@ -140,7 +133,7 @@ class Optimisation:
                 pd.read_csv('nordpool_20200303.csv', decimal=',')[pricing][0:self.nr_of_hours].to_numpy() / 1000 # €/kWh
                 )
             # self.pricing = pd.read_csv('nordpool_20200303.csv', decimal=',')[pricing][0:self.nr_of_hours].to_numpy() / 1000 # €/kWh
-            self.non_shift_offset = self._compute_ineq_con_offest()
+            self.non_shift_offset = self._compute_ineq_con_offest() 
         else:
             pricing_time = [i in list(range(17, 20+1)) for i in range(self.nr_of_hours)]
             self.pricing = [.1 if i else .05 for i in pricing_time] # €/kWh
@@ -209,6 +202,7 @@ class Optimisation:
         return non_shift_offset
     
     def execute(self):
+        """Main method to execute optimisation"""
         raw_result = self.optimise()
         self.raw_result = raw_result
         power, pricing = self.resolve_result(raw_result)
@@ -216,10 +210,12 @@ class Optimisation:
             'power': power,
             'pricing': pricing,
             }
-        self.plot_mode('pricing')
-        self.plot_mode('power')
+        # self.plot_mode('pricing')
+        # self.plot_mode('power')
+        print('++++++++++++++++++++++++\nFinal c= ' + str(round(self.raw_result.fun,5)) + '€/day')
         
     def resolve_result(self, raw_result):
+        """Resolving optimisation results"""
         res_time_wise = self._resolve_res_matrix(raw_result)
         res_power = res_time_wise * self.apps['p'].to_numpy()
         res_pricing = res_time_wise.T * self.pricing
@@ -247,7 +243,6 @@ class Optimisation:
         price_matrix = power_matrix.T * self.pricing
         A_ub = self._conc_aeq_matrix(power_matrix)
         b_ub = np.subtract(np.ones(self.nr_of_hours) *  self.power_max, self.non_shift_offset['power'])
-        # b_ub = np.ones(self.nr_of_hours) *  self.power_max
         A_eq = self._conc_aub_matrix(power_matrix.T)
         b_eq = self.apps['e'].to_numpy()
         c = price_matrix.ravel()
@@ -265,26 +260,16 @@ class Optimisation:
                 'maxiter':5000,
                 },
             )
-        # print(raw_result.slack)
+        raw_result.fun= raw_result.fun + sum(self.non_shift_offset['pricing'])
         return raw_result
         
-    def plot_time_wise(self, data):
-        fig = plt.figure(figsize=(18,6))
-        ax = fig.gca()
-        data.plot(
-            ax=ax,
-            drawstyle="steps-post",
-            linewidth=2,
-            legend=False,
-            )
-        ax.set_xticks(range(self.nr_of_hours))
-        
-    def plot_mode(self, mode):
+    def plot_mode(self, mode, figsize=(16,8)):
+        """Plot either 'pricing' or 'power' hourly"""
         ylabel = {
             'pricing': 'hourly cost (EUR)',
             'power': 'power (kW)',
             }
-        fig = plt.figure(figsize=(24,12))
+        fig = plt.figure(figsize=figsize)
         ax1 = fig.add_subplot(2, 1, 1)
         ax2 = fig.add_subplot(2, 1, 2)
         axes = [ax1, ax2]
@@ -328,8 +313,9 @@ class Optimisation:
                 style='--',
                 linewidth=1.5,
                 )
+            axes[1].right_ax.set_ylabel('price (EUR/kWh)')
         elif mode == 'power':
-            tmp = pd.DataFrame([self.power_max]* len(data), columns=['max-power'])
+            tmp = pd.DataFrame([self.power_max]* len(data), columns=['max\_power'])
             tmp.plot(
                 ax=axes[1],
                 # secondary_y=['max_power'],
@@ -341,57 +327,9 @@ class Optimisation:
             ax.set_xticks(range(self.nr_of_hours+1))
             ax.set_xlabel('time of day (h)')
             ax.grid('on')
+            # ax.legend(loc='center left',bbox_to_anchor=(1.0, 0.5))
             ax.set_ylabel(ylabel[mode])
         return fig
-
-
-class Prob1_simple(Optimisation):
-    """Problem 1 - subclass
-    """
-    def __init__(self):
-        super().__init__(
-            app_names=['dishes', 'laundry', 'ev'],
-            )
-        self.pricing_time = [i in list(range(17, 20+1)) for i in range(self.nr_of_hours)]
-        self.pricing = {
-            'peak': .1, # €/kWh
-            'base': .05, # €/kWh
-            }
-        self.apps['ts'] = self.apps['ts'].apply(lambda x: [i in x for i in range(self.nr_of_hours)])
-        self.apps['ts_p'] = self.apps['ts'].apply(lambda x: [ai and bi for ai, bi in zip(x, self.pricing_time)])
-        self.apps['ts_b'] = self.apps['ts'].apply(lambda x: [ai and not bi for ai, bi in zip(x, self.pricing_time)])
-        self.optimise()
-        
-    def optimise(self):
-        """Run Optimisations
-        TODO: linprog method: default not working, simplex does due at the moment
-        
-        Result
-        ------
-        x: list of x values (true operating hours for every app for either base or peak timer)
-            op_dish_p, op_laun_p, op_ev_p, op_dish_b, op_laun_b, op_ev_b
-        """
-        c = array([x * self.pricing['peak'] for x in self.apps['p']] + [x *self.pricing['base'] for x in self.apps['p']])
-        # A_ub = np.eye(6) 
-        # b_ub = array([sum(x) for x in self.apps['ts_p']] + [sum(x) for x in self.apps['ts_b']])
-        # bounds = np.array([
-        #     np.zeros(6), 
-        #     np.concatenate(
-        #         ([sum(x) for x in self.apps['ts_p']], [sum(x) for x in self.apps['ts_b']])
-        #         )]
-        #     ).transpose().tolist()
-        bounds = tuple((0, sum(x)) for x in self.apps['ts_p']) + tuple((0, sum(x)) for x in self.apps['ts_b'])
-        A_eq = np.concatenate(([np.eye(3) * self.apps['p'].to_numpy()] * 2), axis=1)
-        b_eq = array(self.apps['e'].tolist())
-        res = linprog(
-            c,
-            # A_ub=A_ub,
-            # b_ub=b_ub,
-            A_eq=A_eq,
-            b_eq=b_eq,
-            bounds=bounds,
-            method='simplex',
-            )
         
 
 class Prob1(Optimisation):
@@ -406,13 +344,15 @@ class Prob1(Optimisation):
 
 
 class Prob2(Optimisation):
+    """Problem 2 - subclass
+    """
     def __init__(self, **kwargs):
         self.apps = self.shift_apps
         super().__init__(
             pricing=kwargs.get('data_name', 'Krsand'),
             )
         self.execute()
-        self.plot_operating_time()
+        # self.plot_operating_time()
         
     def plot_operating_time(self):
         data = self.apps['oh']
@@ -425,23 +365,123 @@ class Prob2(Optimisation):
 
         
 class Prob3(Optimisation):
+    """Problem 3 - subclass
+    """
     def __init__(self, **kwargs):
         n_housholds = 30
         self.apps = self.shift_apps
-        # for 
         super().__init__(
             pricing=kwargs.get('data_name', 'Krsand'),
             )
         self.power_max *= n_housholds *.7
         self.apps = pd.concat([self.apps]*n_housholds, keys=range(n_housholds))
+        for key in self.non_shift_offset.keys():
+            self.non_shift_offset[key] *= n_housholds
         self.apps = self.apps.drop([(i,'ev') for i in range(0,n_housholds,2)])
         self.time_matrix = self._create_time_matrix(self.apps)
         self.execute()
+        # self.plot_single_housholds('power')
+        self.plot_pricing()
         
+    def plot_single_housholds(self, mode, idx=[0,1], figsize=(16,12)):
+        """Plot single housholds with/without "ev"
+        
+        Parameters
+        ----------
+        mode: string
+            either 'pricing' or 'power' for repective plots
+        
+        """
+        ylabel = {
+            'pricing': 'hourly cost (EUR)',
+            'power': 'power (kW)',
+            }
+        fig = plt.figure(figsize=figsize)
+        ax1 = fig.add_subplot(2, 1, 1)
+        ax2 = fig.add_subplot(2, 1, 2)
+        axes = [ax1, ax2]
+        data = self.result[mode]
+        data1 = data.get([idx[0]])
+        data1 = pd.DataFrame(data1.to_numpy(), columns=[i[1] for i in data1.columns])
+        data2 = data.get([idx[1]])
+        data2 = pd.DataFrame(data2.to_numpy(), columns=[i[1] for i in data2.columns])
+        data1 = data1.append(
+            pd.DataFrame(data1[-1:], index=[self.nr_of_hours], columns=data1.columns)
+            )
+        data1.plot(
+            ax=axes[0],
+            drawstyle="steps-post",
+            linewidth=2,
+            # legend=False,
+            )
+        axes[0].legend(loc='center left',bbox_to_anchor=(1.0, 0.5))
+        data2 = data2.append(
+            pd.DataFrame(data2[-1:], index=[self.nr_of_hours], columns=data2.columns)
+            )
+        data2.plot(
+            ax=axes[1],
+            drawstyle="steps-post",
+            linewidth=2,
+            # legend=False,
+            )
+        axes[1].legend(loc='center left',bbox_to_anchor=(1.0, 0.5))
+        for ax in axes:
+            ax.set_xticks(range(self.nr_of_hours+1))
+            ax.set_xlabel('time of day (h)')
+            ax.grid('on')
+            # ax.legend(loc='center left',bbox_to_anchor=(1.0, 0.5))
+            ax.set_ylabel(ylabel[mode])
+        return fig
+        
+    def plot_pricing(self, figsize=(16,8)):
+        """Plot pricing curve"""
+        ylabel = {
+            'pricing': 'hourly cost (EUR)',
+            'power': 'power (kW)',
+            }
+        fig = plt.figure(figsize=figsize)
+        # ax1 = fig.add_subplot(2, 1, 1)
+        # ax2 = fig.add_subplot(2, 1, 2)
+        ax = fig.gca()
+        tmp = self.result['pricing']
+        tmp = {
+            'non-shift': self.non_shift_offset['pricing'],
+            'shift': tmp.sum(axis=1),
+            }
+        tmp['total'] = tmp['non-shift'] + tmp['shift']
+        data = pd.DataFrame(
+            tmp
+            )
+        data = data.append(
+            pd.DataFrame(data[-1:], index=[self.nr_of_hours], columns=data.columns)
+            )
+        data.plot(
+            ax=ax,
+            drawstyle="steps-post",
+            linewidth=2,
+            )
+        tmp = pd.DataFrame(self.pricing, columns=['price'])
+        tmp = tmp.append(
+           pd.DataFrame(tmp[-1:], index=[self.nr_of_hours], columns=tmp.columns)
+           )
+        tmp.plot(
+            ax=ax,
+            secondary_y=['price'],
+            drawstyle='steps-post',
+            style='--',
+            linewidth=1.5,
+            )
+        ax.right_ax.set_ylabel('price (EUR/kWh)')
+        ax.set_xticks(range(self.nr_of_hours+1))
+        ax.set_xlabel('time of day (h)')
+        ax.grid('on')
+        # ax.legend(loc='center left',bbox_to_anchor=(1.0, 0.5))
+        ax.set_ylabel(ylabel['pricing'])
+        return fig
         
 if __name__ == "__main__":
     # obj = Prob1_simple()
     # obj = Prob1()
-    obj = Prob2()
+    # obj = Prob2()
     # obj = Prob2(data_name='Ger')
-    # obj = Prob3()
+    obj = Prob3()
