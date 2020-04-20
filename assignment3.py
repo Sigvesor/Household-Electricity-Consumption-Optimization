@@ -31,12 +31,12 @@ class Optimisation:
         'lighting': [ # Lightning between 10:00-20:00
             1.50, 
             1.5/11, 
-            list(range(10, 20+1)),
+            list(range(10, 19+1)),
             ], 
         'heating': [ # Household heating
             8.00,
             8/24,
-            list(range(10, 20+1)),
+            list(range(24)),
             ],
         'fridge': [ # fridge/freezer + small freezer
             3.00, 
@@ -46,17 +46,17 @@ class Optimisation:
         'stove': [ # Cooking stove
             3.90, 
             2.40,
-            list(range(5, 7+1)) + list(range(14, 22+1)),
+            list(range(6, 7+1)) + list(range(18, 19+1)),
             ],
         'tv': [ # Medium size TV
-            .15, 
+            .21, 
             .03,
-            list(range(4, 7+1)) + list(range(14, 22+1)),
+            list(range(14, 22+1)),
             ],
         'computer': [ # 2 computers
             .60,
             .12,
-            list(range(4, 7+1)) + list(range(14, 22+1)),
+            list(range(15, 22+1)),
             ],
         }
     # Shiftable appliances [kWh/day]
@@ -69,22 +69,22 @@ class Optimisation:
         'laundry': [ # Laundry machine
             1.94, 
             .5, 
-            list(range(3, 7+1)) + list(range(14, 22+1)),
+            list(range(3, 6+1)) + list(range(14, 21+1)),
             ], 
         'dryer': [ # Clothes dryer
             2.50, 
             3,
-            list(range(3, 7+1)) + list(range(14, 22+1)),
+            list(range(8, 22+1)),
             ],
         'ev': [ # Electric Vehicle
             9.90, 
-            3, # energy demanded devided by 13operating hours
-            list(range(0, 6+1)) +  list(range(18, 23+1)),
+            2,
+            list(range(0, 6+1)) +  list(range(20, 23+1)),
             ], 
         'gc': [ # Game console
             0.27, 
             0.09,
-            list(range(18, 23+1)),
+            list(range(18, 22+1)),
             ], 
         'phone': [ # Cellphone charge (x3)
             0.05, 
@@ -94,17 +94,17 @@ class Optimisation:
         'coffee': [ # Coffee maker, 2 times/day
             0.53, 
             0.80,
-            list(range(5, 9+1)) + list(range(14, 18+1)),
+            list(range(6, 8+1)) + list(range(16, 18+1)),
             ], 
         'vacuum': [ # Vacuum cleaner
             0.23, 
             1.40,
-            list(range(14, 22+1)),
+            list(range(14, 21+1)),
             ], 
         'microwave': [ # 
             0.30, 
             1.20,
-            list(range(6, 8+1)) + list(range(14, 22+1)),
+            list(range(17, 21+1)),
             ], 
         # 'wifi': [ # Router
         #     0.14, 
@@ -191,7 +191,7 @@ class Optimisation:
     def _rtp_noise(self, pricing):
         np.random.seed(0)
         noise = np.random.randint(-100, 100, len(pricing)) / 100
-        pricing += noise * pricing * .1
+        pricing += noise * pricing * .01
         return pricing
     
     def _compute_ineq_con_offest(self):
@@ -281,12 +281,12 @@ class Optimisation:
         
     def plot_mode(self, mode):
         ylabel = {
-            'pricing': 'hourly cost (€)',
+            'pricing': 'hourly cost (EUR)',
             'power': 'power (kW)',
             }
-        fig = plt.figure(figsize=(24,18))
-        ax1 = fig.add_subplot(3, 1, 1)
-        ax2 = fig.add_subplot(3, 1, 2)
+        fig = plt.figure(figsize=(24,12))
+        ax1 = fig.add_subplot(2, 1, 1)
+        ax2 = fig.add_subplot(2, 1, 2)
         axes = [ax1, ax2]
         data = self.result[mode]
         data = data.append(
@@ -299,10 +299,10 @@ class Optimisation:
             # legend=False,
             )
         tmp = {
-            'non_shift': self.non_shift_offset[mode],
+            'non-shift': self.non_shift_offset[mode],
             'shift': self.result[mode].sum(axis=1),
             }
-        tmp['total'] = tmp['non_shift'] + tmp['shift']
+        tmp['total'] = tmp['non-shift'] + tmp['shift']
         # if mode is 'pricing':
         #     tmp['price'] = self.pricing
         data = pd.DataFrame(
@@ -316,7 +316,7 @@ class Optimisation:
             drawstyle="steps-post",
             linewidth=2,
             )
-        if mode is 'pricing':
+        if mode == 'pricing':
             tmp = pd.DataFrame(self.pricing, columns=['price'])
             tmp = tmp.append(
                pd.DataFrame(tmp[-1:], index=[self.nr_of_hours], columns=tmp.columns)
@@ -328,8 +328,8 @@ class Optimisation:
                 style='--',
                 linewidth=1.5,
                 )
-        elif mode is 'power':
-            tmp = pd.DataFrame([self.power_max]* len(data), columns=['max_power'])
+        elif mode == 'power':
+            tmp = pd.DataFrame([self.power_max]* len(data), columns=['max-power'])
             tmp.plot(
                 ax=axes[1],
                 # secondary_y=['max_power'],
@@ -342,7 +342,7 @@ class Optimisation:
             ax.set_xlabel('time of day (h)')
             ax.grid('on')
             ax.set_ylabel(ylabel[mode])
-
+        return fig
 
 
 class Prob1_simple(Optimisation):
@@ -401,6 +401,7 @@ class Prob1(Optimisation):
         self.apps  = {key: self.shift_apps[key] for key in ['dishes', 'laundry', 'ev']}
         super().__init__(
             )
+        self.power_max = 1
         self.execute()
 
 
@@ -411,17 +412,27 @@ class Prob2(Optimisation):
             pricing=kwargs.get('data_name', 'Krsand'),
             )
         self.execute()
+        self.plot_operating_time()
+        
+    def plot_operating_time(self):
+        data = self.apps['oh']
+        fig = plt.figure()
+        ax = fig.gca()
+        data.plot(
+            ax=ax,
+            kind='bar',
+            )
 
         
 class Prob3(Optimisation):
     def __init__(self, **kwargs):
-        n_housholds = 10
+        n_housholds = 30
         self.apps = self.shift_apps
         # for 
         super().__init__(
             pricing=kwargs.get('data_name', 'Krsand'),
             )
-        self.power_max *= n_housholds
+        self.power_max *= n_housholds *.7
         self.apps = pd.concat([self.apps]*n_housholds, keys=range(n_housholds))
         self.apps = self.apps.drop([(i,'ev') for i in range(0,n_housholds,2)])
         self.time_matrix = self._create_time_matrix(self.apps)
@@ -430,8 +441,7 @@ class Prob3(Optimisation):
         
 if __name__ == "__main__":
     # obj = Prob1_simple()
-    obj = Prob1()
-    # obj = Prob2()
-    obj = Prob2(data_name='Ger')
+    # obj = Prob1()
+    obj = Prob2()
+    # obj = Prob2(data_name='Ger')
     # obj = Prob3()
-    
